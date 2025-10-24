@@ -1,6 +1,6 @@
 ---
 title: 'P&S-2022: Lab assignment 2'
-author: "Hombosh Oleh, Kuryliak Danylo, Pempus Roman"
+author: "Hombosh Oleh, Pavlunyshyn Bohdan, Pempus Roman"
 output:
   html_document:
     df_print: paged
