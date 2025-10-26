@@ -1,6 +1,6 @@
 ---
 title: 'P&S-2022: Lab assignment 2'
-author: "Hombosh Oleh, Pavlunyshyn Bohdan, Pempus Roman"
+author: "Куриляк Данило, Павлунишин Богдан, Гомбош Олег"
 output:
   html_document:
     df_print: paged
@@ -51,25 +51,24 @@ $$
     \end{pmatrix}
 $$
 
-#### Assume that each bit in the transmission $\mathbf{c} \mapsto \mathbf{r}$ gets corrupted independently of the others with probability $p = \mathtt{id}/100$, where $\mathtt{id}$ is your team number. Your task is the following one.
+#### We assume that each bit in the transmission $\mathbf{c} \mapsto \mathbf{r}$ gets corrupted independently of the others with probability $p = 0.02$, where $\mathtt{id}$ is the number of out team.
 
 1.  Simulate the encoding-transmission-decoding process $N$ times and find the estimate $\hat p$ of the probability $p^*$ of correct transmission of a single message $\mathbf{m}$. Comment why, for large $N$, $\hat p$ is expected to be close to $p^*$.\
 2.  By estimating the standard deviation of the corresponding indicator of success by the standard error of your sample and using the CLT, predict the \emph{confidence} interval $(p^*-\varepsilon, p^* + \varepsilon)$, in which the estimate $\hat p$ falls with probability at least $0.95$.\
 3.  What choice of $N$ guarantees that $\varepsilon \le 0.03$?\
 4.  Draw the histogram of the number $k = 0,1,2,3,4$ of errors while transmitting a $4$-digit binary message. Do you think it is one of the known distributions?
 
-#### You can (but do not have to) use the chunks we prepared for you
+#### 
 
-#### First, we set the **id** of the team and define the probability $p$ and the generator and parity-check matrices $G$ and $H$
+#### Parameters and matrices
 
 ```{r}
-# your team id number 
-                          ###
-id <- 50                  ### Change to the correct id!
-                          ###
+
+id <- 2
+
 set.seed(id)
 p <- id/100
-# matrices G and H
+
 G <- matrix(c(1, 1, 1, 0, 0, 0, 0,
 		1, 0, 0, 1, 1, 0, 0,
 		0, 1, 0, 1, 0, 1, 0,
@@ -77,36 +76,102 @@ G <- matrix(c(1, 1, 1, 0, 0, 0, 0,
 H <- t(matrix(c(1, 0, 1, 0, 1, 0, 1,
 		0, 1, 1, 0, 0, 1, 1,
 		0, 0, 0, 1, 1, 1, 1), nrow = 3, byrow = TRUE))
-# cat("The matrix G is: \n") 
-#G  
-#cat("The matrix H is: \n") 
-#H
-#cat("The product GH must be zero: \n")
-#(G%*%H) %%2
 ```
 
-#### Next, generate the messages
+```{r}
+cat("The matrix G is: \n") 
+G  
+cat("The matrix H is: \n") 
+H
+cat("The product GH must be zero: \n")
+(G%*%H) %%2
+```
+
+#### Message generation and transmission
 
 ```{r}
-# generate N messages
+N <- 100000
 
 message_generator <- function(N) {
   matrix(sample(c(0,1), 4*N, replace = TRUE), nrow = N)
 }  
-messages <- message_generator(100)
+messages <- message_generator(100000)
 codewords <- (messages %*% G) %% 2
-```
 
-#### Generate random errors; do not forget that they occur with probability $p$! Next, generate the received messages
+errors <- matrix(rbinom(N*7, 1, 0.02), nrow=N)
+received <- (codewords + errors) %% 2;
+```
 
 ```{r}
-#  errors <- ...
-#  received <-   
+cat("Messages generated are : \n")
+head(messages)
+cat("\n")
+cat("Encoded messages are: \n")
+head(codewords)
+cat("\n")
+cat("Received messages are: \n")
+head(received)
+cat("\n")
+cat("Mean of errors is : ")
+mean(errors)
 ```
 
-The next steps include detecting the errors in the received messages, correcting them, and then decoding the obtained messages. After this, you can continue with calculating all the quantities of interest
+#### **Error detection and correction**
 
-**Do not forget to include several sentences summarizing your work and the conclusions you have made!**
+The 3-bit syndrome is a binary index of the erroneous bit.
+
+```{r}
+syndrome <- (received %*% H) %% 2
+syndrome_index <- syndrome[,1] + 2*syndrome[,2] + 4*syndrome[,3]
+
+corrected <- received
+for (i in 1:N) {
+  if (syndrome_index[i] != 0)
+    corrected[i, syndrome_index[i]] <- (corrected[i, syndrome_index[i]] + 1) %% 2
+}
+```
+
+```{r}
+cat("Failed bits are: \n")
+table(syndrome_index)
+```
+
+#### Decoding and probability estimate
+
+```{r}
+decoded <- corrected[, c(3,5,6,7)]
+success <- rowSums(decoded == messages) == 4
+p_hat   <- mean(success)
+```
+
+```{r}
+cat("Proportion of correctly decoded messages: ")
+p_hat
+```
+
+#### Confidence interval and sample-size condition
+
+```{r}
+se  <- sqrt(p_hat*(1 - p_hat)/N)
+eps <- 1.96 * se
+ci  <- c(p_hat - eps, p_hat + eps)
+N_required <- p_hat*(1 - p_hat)*(1.96/0.03)^2
+```
+
+```{r}
+cat("Required N for precision ε = 0.03: ")
+N_required
+```
+
+### Histogram of bit errors
+
+```{r}
+bit_errors <- rowSums(errors)
+hist(bit_errors, breaks=0:7,
+     main="Histogram of Bit Errors per Transmission",
+     xlab="Number of flipped bits (k)", ylab="Frequency")
+mean(bit_errors); var(bit_errors)
+```
 
 ------------------------------------------------------------------------
 
