@@ -294,21 +294,61 @@ curve(pnorm(x, mean = mu, sd = sigma), col = "red", lwd = 2, add = TRUE)
 
     1.  Suppose we have a random variable $X$. Explain why $\mathbb{E}(\frac{1}{X}) \neq \frac{1}{\mathbb{E(X)}}$;
 
+Explanation: E(1/X) != 1/E(X) because expectation is not linear for nonlinear transformations.
+
     2.  Let $X \sim \mathscr{N}(\mu,\sigma^2)$ with $\mu = teamidnumber$ and $\sigma^{2} = 2\times teamidnumber+7$. Simulate realizations $x_1,x_2,\dots,x_{100}$ of $X$ and $y_1,y_2,\dots,y_{100}$ of $Y := \frac{1}{X}$ to calculate the values of $\frac{1}{\overline{\textbf{X}}}$ and $\overline{\textbf{Y}}$. Comment on the received results;
 
-        ```{r}
-        mu <- 0 #change this!
-        sigma <- 1 #change this
-        N <- 100
+```{r}
+mu <- id
+sigma_sq <- 2 * id + 7
+sigma <- sqrt(sigma_sq)
+N <- 100
 
-        # YOUR CODE HERE
-        ```
+set.seed(id)
+x_sim <- rnorm(N, mean = mu, sd = sigma)
+y_sim <- 1 / x_sim
+
+reciprocal_of_mean <- 1 / mean(x_sim)
+mean_of_reciprocal <- mean(y_sim)
+
+print(paste("Parameters: mu =", mu, ", sigma^2 =", sigma_sq))
+print(paste("1 / mean(X):", round(reciprocal_of_mean, 6)))
+print(paste("mean(1/X):", round(mean_of_reciprocal, 6)))
+```
 
     3.  Let $X$ and $Y$ be exponentially distributed r.v.'s with parameter $\lambda = 2$. Set $Z := \log{X} + 5$. Plot the Quantile-Quantile plot and scatterplot of $X$ and $Y$. Plot the Quantile-Quantile plot and scatterplot of $X$ and $Z$. Explain the results. Comment on the difference of relations between the pairs of random variables. Which pair of r.v.'s is dependent and which one is similar?
 
-        ```{r}
-        # YOUR CODE HERE
-        ```
+```{r}
+N_plots <- 1000
+lambda <- 2
+
+set.seed(id)
+x <- rexp(N_plots, rate = lambda)
+y <- rexp(N_plots, rate = lambda)
+z <- log(x) + 5
+
+par(mfrow = c(2, 2))
+
+# Independent variables X and Y (same distribution)
+plot(x, y, main = "Scatterplot: X vs Y (Independent)",
+     xlab = "X", ylab = "Y", pch = ".", col = "blue")
+qqplot(x, y, main = "Q-Q Plot: X vs Y (Similar distributions)",
+       xlab = "Quantiles of X", ylab = "Quantiles of Y")
+abline(0, 1, col = "red", lwd = 2)
+
+# Dependent variables X and Z
+plot(x, z, main = "Scatterplot: X vs Z (Dependent)",
+     xlab = "X", ylab = "Z", pch = ".", col = "darkgreen")
+qqplot(x, z, main = "Q-Q Plot: X vs Z (Different distributions)",
+       xlab = "Quantiles of X", ylab = "Quantiles of Z")
+abline(0, 1, col = "red", lwd = 2)
+
+par(mfrow = c(1, 1))
+
+
+# Comment: X and Y are independent but similarly distributed.
+# X and Z are dependent; transformation creates correlation.
+```
 
     ------------------------------------------------------------------------
 
@@ -326,18 +366,43 @@ curve(pnorm(x, mean = mu, sd = sigma), col = "red", lwd = 2, add = TRUE)
 
         -   Uniformly distributed
 
+The random variable $X$ represents the total number of "Successes" (defined as getting Heads) in a fixed number of independent trials ($n=3$ coin tosses). The probability of success in each trial is constant ($p=0.5$ for a fair coin).This is the classic definition of a Binomially distributed (Binomially distributed) random variable.Therefore, $X \sim \text{Bin}(n=3, p=0.5)$.
+
     2.  What are the expected value and variance of X? Simulate realizations $x_1,x_2,\dots,x_{100}$ of $X$ to calculate the values of sample mean $\overline{\mathbf{X}}$ and sample variance $s^2 = \frac{\sum_{i=1}^{n}{(x_i - \overline{x})^{2}}}{n-1}$. Comment on the results;
 
-        ```{r}
-        # YOUR CODE HERE
-        ```
+```{r}
+N <- 100
+n_trials <- 3
+p_success <- 0.5
+
+set.seed(id)
+x_sim <- rbinom(N, size = n_trials, prob = p_success)
+
+sample_mean_x <- mean(x_sim)
+sample_var_x <- var(x_sim)
+
+print(paste("Теоретичне E(X):", 1.5))
+print(paste("Вибіркове середнє X:", sample_mean_x))
+print(paste("Теоретична Var(X):", 0.75))
+print(paste("Вибіркова дисперсія X:", sample_var_x))
+# Comment: sample mean and variance are close to theoretical values.
+```
 
     3.  What are the expected value and variance of Y? Simulate realizations $y_1,y_2,\dots,y_{100}$ of $Y$ to calculate the values of sample mean $\overline{\mathbf{Y}}$ and sample variance $s^2 = \frac{\sum_{i=1}^{n}{(y_i - \overline{y})^{2}}}{n-1}$. Comment on the results;
 
-        ```{r}
-        # YOUR CODE HERE
-        ```
+```{r}
+y_sim <- 0.5 * x_sim - 1
 
+sample_mean_y <- mean(y_sim)
+sample_var_y <- var(y_sim)
+
+print(paste("Теоретичне E(Y):", -0.25))
+print(paste("Вибіркове середнє Y:", sample_mean_y))
+print(paste("Теоретична Var(Y):", 0.1875))
+print(paste("Вибіркова дисперсія Y:", sample_var_y))
+# Comment: Expected value of Y is negative, meaning the game is not profitable.
+```
+We empirically confirmed the non-linearity of expectation ($\mathbb{E}(1/X) \neq 1/\mathbb{E}(X)$) 11, used scatterplots and Q-Q plots to visually differentiate between independent and functionally dependent random variables 12, and validated the theoretical mean and variance of the Binomial distribution through simulation.
 **Do not forget to include several sentences summarizing your work and the conclusions you have made!**
 
 ------------------------------------------------------------------------
