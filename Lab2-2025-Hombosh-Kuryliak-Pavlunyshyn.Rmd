@@ -1023,5 +1023,11 @@ variance of the Binomial distribution through simulation.
 
 ### General summary and conclusions
 
-Summarize here what you've done, whether you solved the tasks, what
-difficulties you had etc.
+We completed all four tasks.
+In Task 1, we simulated the [7,4] Hamming code and calculated the empirical probability of correct message transmission, confirming its error-correcting capabilities.
+
+In Tasks 2 and 3, we worked with the Poisson and Exponential distributions. We observed the Central Limit Theorem in action: as the sample size ($n$) increased, the distribution of sample means increasingly resembled a normal distribution.We also used the CLT and inequalities (Markov, Chernoff) to solve practical problems. Finding the precise maximum safe number of samples (Tasks 2 & 3) was a bit challenging, as the theoretical bounds gave very conservative estimates, forcing us to rely on simulation and a search to find the final value.
+
+In Task 4, we experimentally showed that $\mathbb{E}(1/X) \neq 1/\mathbb{E}(X)$ and visually compared dependent and independent random variables. We also analyzed a game based on the binomial distribution, confirming it was unprofitable for the player.
+
+All simulations ran successfully, and the empirical results agreed well with the theory. The main difficulty was tuning the simulations to find precise values (like the max $n$) where theoretical formulas were only approximations.
