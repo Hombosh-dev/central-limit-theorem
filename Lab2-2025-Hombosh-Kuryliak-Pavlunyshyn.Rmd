@@ -197,38 +197,248 @@ Assume that a medical laboratory receives $n$ samples of radioactive element ${{
     -   calculate the number of elements of the sample which are less than critical value ($8 \times 10^8$) and calculate the empirical probability; comment whether it is close to the desired level $0.95$
 
 ```{r}
-lambda <- 1  # change this!
-N <- 100     # change this!
+lambda <- 136.907
+N <- 100
 mu <- N * lambda
 K <- 1e3
 n <- 5
 sample_means <- colMeans(matrix(rpois(n*K, lambda = mu), nrow=n))
 ```
-
-#### Next, calculate the parameters of the standard normal approximation
-
+# PART 1: Calculate the Poisson parameter
 ```{r}
-mu <- 0       # change this!
-sigma <- 1    # change this!
+id <- 2
+T <- 30.1
+
+m <- id * 1e-6
+M <- 136.907
+Na <- 6e23
+
+T_seconds <- T * 365.25 * 24 * 3600
+
+atoms_number <- m / M * Na
+lambda <- log(2) / T_seconds
+
+mu <- atoms_number * lambda
+
+mu
+
 ```
 
-#### We can now plot ecdf and cdf
+# PART 2: Central Limit Theorem Analysis
+```{r}
+K <- 10000
+
+analyze_sample_means <- function(n, mu, K) {
+  sample_means <- replicate(K, mean(rpois(n, lambda = mu)))
+  
+  theoretical_mean <- mu
+  theoretical_sd <- sqrt(mu / n)
+  
+  Fs <- ecdf(sample_means)
+  
+  x_vals <- seq(min(sample_means), max(sample_means), length.out = 1000)
+  empirical_cdf <- Fs(x_vals)
+  theoretical_cdf <- pnorm(x_vals, mean = theoretical_mean, sd = theoretical_sd)
+  max_diff <- max(abs(empirical_cdf - theoretical_cdf))
+
+  
+  xlims <- c(theoretical_mean - 4*theoretical_sd, 
+             theoretical_mean + 4*theoretical_sd)
+  
+  plot(Fs, 
+       xlim = xlims, 
+       ylim = c(0, 1),
+       col = "blue",
+       lwd = 2,
+       main = paste("ECDF vs Normal CDF for Sample Means (n =", n, ")"),
+       xlab = "Sample Mean",
+       ylab = "Cumulative Probability")
+  
+  curve(pnorm(x, mean = theoretical_mean, sd = theoretical_sd), 
+        col = "red", 
+        lwd = 2, 
+        add = TRUE)
+  
+  legend("topleft", 
+         legend = c("Empirical CDF", 
+                   paste0("Normal(μ=", sprintf("%.2e", theoretical_mean), 
+                         ", σ=", sprintf("%.2e", theoretical_sd), ")"),
+                   paste("Max difference =", sprintf("%.6f", max_diff))),
+         col = c("blue", "red", "black"),
+         lwd = c(2, 2, 0),
+         bty = "n")
+  
+  return(list(mean = theoretical_mean, 
+              sd = theoretical_sd, 
+              max_diff = max_diff,
+              sample_means = sample_means))
+}
+
+```
 
 ```{r}
-xlims <- c(mu-3*sigma,mu+3*sigma)
-Fs <- ecdf(sample_means)
+par(mfrow = c(1, 3))
+results_n5 <- analyze_sample_means(5, mu, K)
+results_n10 <- analyze_sample_means(10, mu, K)
+results_n50 <- analyze_sample_means(50, mu, K)
+par(mfrow = c(1, 1))
+
+cat("\nResults for n = 5:\n")
+cat("  Theoretical mean:", sprintf("%.3e", results_n5$mean), "\n")
+cat("  Theoretical SD:", sprintf("%.3e", results_n5$sd), "\n")
+cat("  Max difference:", sprintf("%.6f", results_n5$max_diff), "\n")
+
+cat("\nResults for n = 10:\n")
+cat("  Theoretical mean:", sprintf("%.3e", results_n10$mean), "\n")
+cat("  Theoretical SD:", sprintf("%.3e", results_n10$sd), "\n")
+cat("  Max difference:", sprintf("%.6f", results_n10$max_diff), "\n")
+
+cat("\nResults for n = 50:\n")
+cat("  Theoretical mean:", sprintf("%.3e", results_n50$mean), "\n")
+cat("  Theoretical SD:", sprintf("%.3e", results_n50$sd), "\n")
+cat("  Max difference:", sprintf("%.6f", results_n50$max_diff), "\n")
+
+cat("\nComment: As n increases, the maximum difference decreases,")
+cat("\nshowing that the CLT approximation improves with larger n.\n\n")
+```
+
+# PART 3: Maximum n for Safety Constraint
+```{r}
+
+critical_value <- 8e8
+target_probability <- 0.95
+
+estimate_probability <- function(n, mu, critical_value, K = 10000) {
+  sums <- replicate(K, sum(rpois(n, lambda = mu)))
+  empirical_prob <- mean(sums < critical_value)
+  return(list(prob = empirical_prob, sums = sums))
+}
+
+calculate_bounds <- function(n, mu, critical_value) {
+  total_mean <- n * mu
+  total_var <- n * mu
+  total_sd <- sqrt(total_var)
+  
+  if (total_mean < critical_value) {
+    markov_bound <- 1 - total_mean / critical_value
+  } else {
+    markov_bound <- 0
+  }
+
+  if (total_mean < critical_value) {
+    t <- critical_value / total_mean
+    chernoff_bound <- 1 - exp(-total_mean * (t * log(t) - t + 1))
+  } else {
+    chernoff_bound <- 0
+  }
+  
+  clt_prob <- pnorm(critical_value, mean = total_mean, sd = total_sd)
+  
+  return(list(markov = markov_bound, 
+              chernoff = chernoff_bound, 
+              clt = clt_prob,
+              mean = total_mean,
+              sd = total_sd))
+}
+
+```
+
+# Searching for perfect n
+
+```{r}
+n_min <- 1
+n_max <- 10000
+
+while (n_max - n_min > 1) {
+  n_test <- floor((n_min + n_max) / 2)
+  result <- estimate_probability(n_test, mu, critical_value, K = 5000)
+  
+  if (result$prob >= target_probability) {
+    n_min <- n_test
+  } else {
+    n_max <- n_test
+  }
+  
+  cat("Testing n =", n_test, ", P(S < critical) =", 
+      sprintf("%.4f", result$prob), "\n")
+}
+
+n_final <- n_min
+cat("\nFinal test with K = 10000...\n")
+final_result <- estimate_probability(n_final, mu, critical_value, K = 10000)
+bounds <- calculate_bounds(n_final, mu, critical_value)
+
+cat("\n=== RESULTS ===\n")
+cat("Maximum n:", n_final, "\n")
+cat("Empirical probability:", sprintf("%.4f", final_result$prob), "\n\n")
+
+cat("Theoretical bounds:\n")
+cat("  Markov inequality: P(S < critical) ≥", sprintf("%.4f", bounds$markov), "\n")
+cat("  Chernoff bound:    P(S < critical) ≥", sprintf("%.4f", bounds$chernoff), "\n")
+cat("  CLT approximation: P(S < critical) ≈", sprintf("%.4f", bounds$clt), "\n\n")
+
+cat("Parameters for S = X₁ + ... + Xₙ:\n")
+cat("  E[S] = n*μ =", sprintf("%.3e", bounds$mean), "\n")
+cat("  SD[S] = √(n*μ) =", sprintf("%.3e", bounds$sd), "\n\n")
+```
+
+# Visualization for better understanding
+
+```{r}
+hist(final_result$sums, 
+     breaks = 50,
+     col = "lightblue",
+     border = "white",
+     main = paste("Distribution of Total Decays (n =", n_final, ")"),
+     xlab = "Total Number of Decays",
+     freq = FALSE,
+     xlim = c(min(final_result$sums), max(final_result$sums, critical_value)))
+
+# Add normal density curve
+curve(dnorm(x, mean = bounds$mean, sd = bounds$sd), 
+      col = "red", lwd = 2, add = TRUE)
+
+abline(v = critical_value, col = "darkgreen", lwd = 2, lty = 2)
+abline(v = bounds$mean, col = "orange", lwd = 2, lty = 3)
+
+legend("topright", 
+       legend = c("Empirical distribution",
+                 "Normal approximation",
+                 "Critical value",
+                 "Mean",
+                 paste("P(S < critical) =", sprintf("%.4f", final_result$prob))),
+       col = c("lightblue", "red", "darkgreen", "orange", "black"),
+       lwd = c(10, 2, 2, 2, 0),
+       lty = c(1, 1, 2, 3, 0),
+       bty = "n")
+
+# Visualization 2: ECDF vs Theoretical CDF
+xlims <- c(bounds$mean - 4*bounds$sd, bounds$mean + 4*bounds$sd)
+Fs <- ecdf(final_result$sums)
+
 plot(Fs, 
      xlim = xlims, 
-     ylim = c(0,1),
+     ylim = c(0, 1),
      col = "blue",
      lwd = 2,
-     main = "Comparison of ecdf and cdf")
-curve(pnorm(x, mean = mu, sd = sigma), col = "red", lwd = 2, add = TRUE)
+     main = paste("ECDF vs Normal CDF for Total Decays (n =", n_final, ")"))
+
+curve(pnorm(x, mean = bounds$mean, sd = bounds$sd), 
+      col = "red", lwd = 2, add = TRUE)
+
+abline(v = critical_value, col = "darkgreen", lwd = 2, lty = 2)
+abline(h = target_probability, col = "purple", lwd = 1, lty = 3)
+
+legend("topleft",
+       legend = c("Empirical CDF", 
+                 "Normal CDF",
+                 "Critical value",
+                 "Target probability"),
+       col = c("blue", "red", "darkgreen", "purple"),
+       lwd = c(2, 2, 2, 1),
+       lty = c(1, 1, 2, 3),
+       bty = "n")
 ```
-
-**Next, proceed with all the remaining steps**
-
-**Do not forget to include several sentences summarizing your work and the conclusions you have made!**
 
 ------------------------------------------------------------------------
 
@@ -254,35 +464,280 @@ curve(pnorm(x, mean = mu, sd = sigma), col = "red", lwd = 2, add = TRUE)
 #### First, generate samples an sample means:
 
 ```{r}
-nu1 <- 1  # change this!
-K <- 1e3
-n <- 5
-sample_means <- colMeans(matrix(rexp(n*K, rate = nu1), nrow=n))
-```
+team_id <- 2
+nu1 <- team_id + 10
+K <- 10000
 
-#### Next, calculate the parameters of the standard normal approximation
+analyze_exponential_means <- function(n, nu1, K) {
+  sample_means <- colMeans(matrix(rexp(n*K, rate = nu1), nrow = n))
+
+  mu <- 1 / nu1
+  sigma <- 1 / (nu1 * sqrt(n))
+  
+  Fs <- ecdf(sample_means)
+  
+  x_vals <- seq(min(sample_means), max(sample_means), length.out = 1000)
+  empirical_cdf <- Fs(x_vals)
+  theoretical_cdf <- pnorm(x_vals, mean = mu, sd = sigma)
+  max_diff <- max(abs(empirical_cdf - theoretical_cdf))
+  
+  xlims <- c(mu - 4*sigma, mu + 4*sigma)
+  
+  plot(Fs, 
+       xlim = xlims, 
+       ylim = c(0, 1),
+       col = "blue",
+       lwd = 2,
+       main = paste("ECDF vs Normal CDF for Sample Means (n =", n, ")"),
+       xlab = "Sample Mean (time between clicks)",
+       ylab = "Cumulative Probability")
+  
+  curve(pnorm(x, mean = mu, sd = sigma), 
+        col = "red", 
+        lwd = 2, 
+        add = TRUE)
+  
+  legend("topleft", 
+         legend = c("Empirical CDF", 
+                   paste0("Normal(μ=", sprintf("%.4f", mu), 
+                         ", σ=", sprintf("%.4f", sigma), ")"),
+                   paste("Max difference =", sprintf("%.6f", max_diff))),
+         col = c("blue", "red", "black"),
+         lwd = c(2, 2, 0),
+         bty = "n")
+  
+  return(list(mu = mu, 
+              sigma = sigma, 
+              max_diff = max_diff,
+              sample_means = sample_means))
+}
+
+par(mfrow = c(1, 3))
+results_n5 <- analyze_exponential_means(5, nu1, K)
+results_n10 <- analyze_exponential_means(10, nu1, K)
+results_n50 <- analyze_exponential_means(50, nu1, K)
+par(mfrow = c(1, 1))
+```
+```{r}
+# Analyze for n = 5, 10, 50
+par(mfrow = c(1, 3))
+results_n5 <- analyze_exponential_means(5, nu1, K)
+results_n10 <- analyze_exponential_means(10, nu1, K)
+results_n50 <- analyze_exponential_means(50, nu1, K)
+par(mfrow = c(1, 1))
+
+cat("\nResults for n = 5:\n")
+cat("  Theoretical μ:", sprintf("%.6f", results_n5$mu), "\n")
+cat("  Theoretical σ:", sprintf("%.6f", results_n5$sigma), "\n")
+cat("  Max difference:", sprintf("%.6f", results_n5$max_diff), "\n")
+
+cat("\nResults for n = 10:\n")
+cat("  Theoretical μ:", sprintf("%.6f", results_n10$mu), "\n")
+cat("  Theoretical σ:", sprintf("%.6f", results_n10$sigma), "\n")
+cat("  Max difference:", sprintf("%.6f", results_n10$max_diff), "\n")
+
+cat("\nResults for n = 50:\n")
+cat("  Theoretical μ:", sprintf("%.6f", results_n50$mu), "\n")
+cat("  Theoretical σ:", sprintf("%.6f", results_n50$sigma), "\n")
+cat("  Max difference:", sprintf("%.6f", results_n50$max_diff), "\n")
+```
+As n increases from 5 to 50, the maximum difference decreases,
+demonstrating that the normal approximation improves with larger sample sizes.
+The Central Limit Theorem holds well even for moderately small n.
+
+###     Let Xᵢ ~ Exp(ν) be time between clicks (i-1) and i
+###    S = X₁ + ... + X₁₀₀ is total time for 100 clicks
+###    Safe if: S > 60 seconds (i.e., 100 clicks take more than 60 sec)
+###    Equivalently: P(S > 60) ≥ 0.95, or P(S ≤ 60) ≤ 0.05
 
 ```{r}
-mu <- 0       # change this!
-sigma <- 1    # change this!
+calculate_max_N_bounds <- function(nu1, n_clicks = 100, time_limit = 60, target_prob = 0.05) {
+  results <- list()
+
+  markov_N <- n_clicks / (nu1 * time_limit / target_prob)
+  results$markov <- floor(markov_N)
+
+  chernoff_search <- function(N) {
+    nu <- N * nu1
+    lambda_param <- n_clicks / time_limit
+    if (nu <= lambda_param) return(1)  # bound is useless
+    t_opt <- nu - lambda_param
+    bound <- ((nu / (nu + t_opt)) ^ n_clicks) * exp(t_opt * time_limit)
+    return(bound)
+  }
+  
+  N_test <- seq(1, 100, by = 0.1)
+  chernoff_bounds <- sapply(N_test, chernoff_search)
+  N_chernoff <- max(N_test[chernoff_bounds <= target_prob])
+  results$chernoff <- floor(N_chernoff)
+  
+  z_alpha <- qnorm(target_prob)
+
+  N_clt <- (n_clicks + 10 * z_alpha) / (time_limit * nu1)
+  results$clt <- floor(N_clt)
+  
+  return(results)
+}
 ```
 
+# MARKOV INEQUALITY: P(S ≤ a) cannot be directly bounded by Markov
+  # But we can use: P(S > a) ≤ E[S]/a only if E[S] ≥ a
+  # We need P(S > 60) ≥ 0.95, so E[S] should be large
+  # Markov gives: P(S ≤ 60) ≤ 1 - E[S]/60 (not useful when E[S] < 60)
+  # Better approach: E[S] = 60/0.05 = 1200 to ensure the tail is small enough
+  # This is very conservative
+
+# CHERNOFF BOUND for exponential sum
+  # For S ~ Gamma(n, ν), the MGF is M_S(t) = (ν/(ν-t))^n for t < ν
+  # P(S ≤ a) = P(e^(-tS) ≥ e^(-ta)) ≤ E[e^(-tS)]/e^(-ta) = (ν/(ν+t))^n * e^(ta)
+  # Optimize over t > 0
+  # Optimal t = ν - n/a when n/a < ν
+  # This gives Chernoff bound: P(S ≤ a) ≤ (a*ν/n * e^(1 - a*ν/n))^n
+  
+# CENTRAL LIMIT THEOREM
+  # S ≈ N(n/ν, n/ν²) = N(100/(N*ν₁), 100/(N*ν₁)²)
+  # P(S ≤ 60) = Φ((60 - 100/(N*ν₁)) / (10/(N*ν₁)))
+  # We want Φ((60 - 100/(N*ν₁)) / (10/(N*ν₁))) ≤ 0.05
+  # So (60 - 100/(N*ν₁)) / (10/(N*ν₁)) ≤ Φ^(-1)(0.05) ≈ -1.645
+  # (60*N*ν₁ - 100) / 10 ≤ -1.645
+  # 60*N*ν₁ - 100 ≤ -16.45
+  # N ≤ 83.55 / (60*ν₁)
+  
+# More careful: (60 - μ)/σ = z_α where μ = 100/(N*ν₁), σ = 10/(N*ν₁)
+  # 60 - 100/(N*ν₁) = z_α * 10/(N*ν₁)
+  # 60*N*ν₁ - 100 = 10*z_α
+  # N = (100 + 10*z_α) / (60*ν₁)
+
+```{r}
+bounds <- calculate_max_N_bounds(nu1)
+
+cat("  Markov inequality: N ≤", bounds$markov, "(very conservative)\n")
+cat("  Chernoff bound:    N ≤", bounds$chernoff, "\n")
+cat("  CLT approximation: N ≤", bounds$clt, "\n\n")
+
+N_predicted <- bounds$clt
+
+if (is.na(N_predicted) || N_predicted <= 0) {
+  cat("Warning: CLT prediction is invalid. Using conservative estimate.\n")
+  N_predicted <- max(1, floor(bounds$chernoff))
+}
+
+if (N_predicted < 1) N_predicted <- 1
+
+nu_predicted <- N_predicted * nu1
+
+cat("Using N =", N_predicted, ", ν =", nu_predicted, "\n\n")
+cat("(c) & (d) Simulation with N =", N_predicted, "\n")
+
+simulate_safety <- function(N, nu1, n_clicks = 100, time_limit = 60, K = 10000) {
+  if (N <= 0 || is.na(N)) {
+    return(list(total_times = rep(NA, K), 
+                prob_safe = NA,
+                nu = NA))
+  }
+  
+  nu <- N * nu1
+  
+  total_times <- replicate(K, sum(rexp(n_clicks, rate = nu)))
+  prob_safe <- mean(total_times > time_limit)
+  
+  return(list(total_times = total_times, 
+              prob_safe = prob_safe,
+              nu = nu))
+}
+
+simulation_result <- simulate_safety(N_predicted, nu1, K = K)
+
+if (!is.na(simulation_result$prob_safe) && simulation_result$prob_safe >= 0.95) {
+  cat("✓ The location is safe with the predicted number of samples.\n")
+} else {
+  cat("✗ The predicted N is too high. Need to reduce N.\n")
+  N_min <- 1
+  N_max <- N_predicted
+  
+  cat("\nRefining N through binary search...\n")
+  while (N_max - N_min > 1) {
+    N_test <- floor((N_min + N_max) / 2)
+    test_result <- simulate_safety(N_test, nu1, K = 5000)
+    
+    if (test_result$prob_safe >= 0.95) {
+      N_min <- N_test
+    } else {
+      N_max <- N_test
+    }
+    cat("Testing N =", N_test, ", P(safe) =", sprintf("%.4f", test_result$prob_safe), "\n")
+  }
+  
+  N_predicted <- N_min
+  nu_predicted <- N_predicted * nu1
+  simulation_result <- simulate_safety(N_predicted, nu1, K = K)
+  
+  cat("\nFinal N =", N_predicted, "\n")
+  cat("Final P(safe) =", sprintf("%.4f", simulation_result$prob_safe), "\n")
+}
+
+```
 #### We can now plot ecdf and cdf
 
 ```{r}
-xlims <- c(mu-3*sigma,mu+3*sigma)
-Fs <- ecdf(sample_means)
+Fs <- ecdf(simulation_result$total_times)
+xlims <- c(mean_S - 4*sd_S, mean_S + 4*sd_S)
+
 plot(Fs, 
-     xlim = xlims, 
+     xlim = xlims,
+     ylim = c(0, 1),
      col = "blue",
      lwd = 2,
-     main = "Comparison of ecdf and cdf")
-curve(pnorm(x, mean = mu, sd = sigma), col = "red", lwd = 2, add = TRUE)
+     main = "ECDF vs Normal CDF",
+     xlab = "Total Time (seconds)",
+     ylab = "Cumulative Probability")
+
+curve(pnorm(x, mean = mean_S, sd = sd_S), 
+      col = "red", lwd = 2, add = TRUE)
+
+abline(v = 60, col = "darkgreen", lwd = 2, lty = 2)
+abline(h = 0.05, col = "purple", lwd = 1, lty = 3)
+
+legend("topleft",
+       legend = c("Empirical CDF", "Normal CDF", "Time limit", "α = 0.05"),
+       col = c("blue", "red", "darkgreen", "purple"),
+       lwd = c(2, 2, 2, 1),
+       lty = c(1, 1, 2, 3),
+       bty = "n")
+
+par(mfrow = c(1, 1))
 ```
 
-**Next, proceed with all the remaining steps**
+#### Additional visualization
 
-**Do not forget to include several sentences summarizing your work and the conclusions you have made!**
+```{r}
+
+par(mfrow = c(1, 2))
+
+hist(simulation_result$total_times, 
+     breaks = 50,
+     col = "lightblue",
+     border = "white",
+     main = paste("Distribution of Total Time (N =", N_predicted, ")"),
+     xlab = "Total Time for 100 clicks (seconds)",
+     freq = FALSE)
+
+mean_S <- 100 / nu_predicted
+sd_S <- 10 / nu_predicted
+curve(dnorm(x, mean = mean_S, sd = sd_S), 
+      col = "red", lwd = 2, add = TRUE)
+
+abline(v = 60, col = "darkgreen", lwd = 2, lty = 2)
+abline(v = mean_S, col = "orange", lwd = 2, lty = 3)
+
+legend("topright", 
+       legend = c("Empirical", "Normal approx.", "Time limit (60s)", "Mean"),
+       col = c("lightblue", "red", "darkgreen", "orange"),
+       lwd = c(10, 2, 2, 2),
+       lty = c(1, 1, 2, 3),
+       bty = "n")
+
+```
 
 ------------------------------------------------------------------------
 
